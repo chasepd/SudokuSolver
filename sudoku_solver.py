@@ -8,46 +8,44 @@ import torch.nn as nn
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class Encoder(nn.Module):
+class Reader(nn.Module):
     def __init__(self):
-        super(Encoder, self).__init__()
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Flatten()
-        )
-        self.fc = nn.Linear(32 * 125 * 125, 800)
+        super(Reader, self).__init__()
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.relu = nn.ReLU()
 
-    def forward(self, x):
-        x = self.conv_layers(x)
-        x = self.fc(x)
+        # Dummy input to calculate flat features
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, 3, 500, 500)  # Assuming input image size is 500x500
+            dummy_output = self.features(dummy_input)
+            flat_features = dummy_output.view(-1).shape[0]
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(flat_features, 800)
+        self.fc2 = nn.Linear(800, 81*10)
+
+    def features(self, x):
+        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv2(x))
+        x = self.relu(self.conv3(x))
+        x = self.pool(x)
         return x
 
-class Solver(nn.Module):
-    def __init__(self, encoder):
-        super(Solver, self).__init__()
-        self.encoder = encoder
-        self.fc = nn.Sequential(
-            nn.Linear(800, 256),
-            nn.ReLU(),
-            nn.Linear(256, 81*10)
-        )
-
     def forward(self, x):
-        x = self.encoder(x)
-        x = self.fc(x)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
         return x
 
 def load_model():
-    encoder = Encoder().to(device)
-    encoder.load_state_dict(torch.load('models/encoder_model.pth'))
-    solver = Solver(encoder).to(device)
-    solver.load_state_dict(torch.load('models/solver_model.pth'))
-    return solver
+    reader = Reader().to(device)
+    reader.load_state_dict(torch.load('models/reader_model.pth', map_location=device))
+    return reader
 
 def process_image(image_path):
     image = Image.open(image_path).convert('RGB')
