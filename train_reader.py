@@ -111,7 +111,7 @@ if not os.path.exists('models'):
 
 # Train the model
 print("Training the model...")
-num_epochs = 15
+num_epochs = 5
 for epoch in range(num_epochs):
     print(f"Epoch {epoch+1}/{num_epochs}")
     total_batches = len(dataloader)
