@@ -43,24 +43,23 @@ class Reader(nn.Module):
         # Convolutional layers
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.relu = nn.ReLU()
 
         # Dummy input to calculate flat features
         with torch.no_grad():
-            dummy_input = torch.zeros(1, 3, 500, 500)  # Assuming input image size is 500x500
+            dummy_input = torch.zeros(1, 3, 500, 500)  # Input image size is 500x500
             dummy_output = self.features(dummy_input)
             flat_features = dummy_output.view(-1).shape[0]
 
         # Fully connected layers
         self.fc1 = nn.Linear(flat_features, 800)
-        self.fc2 = nn.Linear(800, 81*10)
+        self.fc2 = nn.Linear(800, 5000)
+        self.fc3 = nn.Linear(5000, 81*10)
 
     def features(self, x):
         x = self.relu(self.conv1(x))
         x = self.relu(self.conv2(x))
-        x = self.relu(self.conv3(x))
         x = self.pool(x)
         return x
 
@@ -69,6 +68,7 @@ class Reader(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
+        x = self.fc3(x)
         return x
 
 
@@ -97,24 +97,28 @@ try:
     if os.path.isfile(reader_path):
         print("Loading saved reader model to continue training...")
         reader.load_state_dict(torch.load(reader_path))
-except Exception as e:
+except:
+    print(f"Error loading model, initializing new model...")
     pass
 print(f"reader initialized on {device}")
 
 # Define the loss function and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(reader.parameters(), lr=0.001)
+optimizer = optim.Adam(reader.parameters(), lr=0.0001)
 
 # Verify models directory exists
 if not os.path.exists('models'):
     os.makedirs('models')
 
+total_batches = len(dataloader)
+total_validation_batches = len(validation_loader)
+
 # Train the model
 print("Training the model...")
-num_epochs = 5
+num_epochs = 10
 for epoch in range(num_epochs):
     print(f"Epoch {epoch+1}/{num_epochs}")
-    total_batches = len(dataloader)
+
     reader.train()
     for batch_index, (images, labels) in enumerate(dataloader, start=1):
         images = images.to(device)
@@ -133,6 +137,7 @@ for epoch in range(num_epochs):
         percentage = (batch_index / total_batches) * 100
         print(f'\rProgress: {percentage:.2f}%', end='')
     # Validation loop
+    
     reader.eval()
     with torch.no_grad():
         total_val_loss = 0
@@ -141,9 +146,10 @@ for epoch in range(num_epochs):
             outputs = reader(images)
             val_loss = criterion(outputs.view(-1, 10), labels.view(-1))
             total_val_loss += val_loss.item()
+            print(f'\rValidation Progress: {percentage:.2f}%', end='')
     print()
 
-    average_val_loss = total_val_loss / len(validation_loader)
+    average_val_loss = total_val_loss / total_validation_batches
     # Print the loss after each epoch
     print(f"Epoch [{epoch+1}/{num_epochs}] complete, Loss: {loss.item():.4f}, Val Loss: {average_val_loss:.4f}")
     torch.save(reader.state_dict(), f'models/reader_model.pth')
