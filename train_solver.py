@@ -55,8 +55,9 @@ class Solver(nn.Module):
 
         # Fully connected layers
         self.fc1 = nn.Linear(flat_features, 800)
-        self.fc2 = nn.Linear(800, 5000)
-        self.fc3 = nn.Linear(5000, 81*10)
+        self.fc2 = nn.Linear(800, 800)
+        self.fc3 = nn.Linear(800, 5000)
+        self.fc4 = nn.Linear(5000, 81*10)
 
     def features(self, x):
         x = self.relu(self.conv1(x))
@@ -71,6 +72,7 @@ class Solver(nn.Module):
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
         x = self.fc3(x)
+        x = self.fc4(x)
         return x
 
 
