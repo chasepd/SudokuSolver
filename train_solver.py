@@ -12,85 +12,65 @@ from torchvision.datasets import ImageFolder
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using {device} device")
 
-class ImageTextDataset(Dataset):
-    def __init__(self, img_dir, text_dir, transform=None):
-        self.img_dir = img_dir
-        self.text_dir = text_dir
+class SudokuDataset(Dataset):
+    def __init__(self, unsolved_dir, solved_dir, transform=None):
+        self.unsolved_dir = unsolved_dir
+        self.solved_dir = solved_dir
         self.transform = transform
-        self.img_names = [f for f in os.listdir(img_dir) if f.endswith('.png')]
+        self.unsolved_filenames = [f for f in os.listdir(unsolved_dir) if f.endswith('.txt')]
         
     def __len__(self):
-        return len(self.img_names)
+        return len(self.unsolved_filenames)
     
     def __getitem__(self, idx):
-        img_name = self.img_names[idx]
-        img_path = os.path.join(self.img_dir, img_name)
-        text_path = os.path.join(self.text_dir, img_name.replace('.png', '.txt'))
+        unsolved_basename = self.unsolved_filenames[idx]
+        unsolved_filename = os.path.join(self.unsolved_dir, unsolved_basename)
+        solved_filename = os.path.join(self.solved_dir, unsolved_basename)
+
+        with open(unsolved_filename, 'r') as file:
+            unsolved_text_data = file.read().strip().replace('.', '0').split()
+            unsolved_text_tensor = torch.tensor([int(num) for num in unsolved_text_data], dtype=torch.long).view(81)
         
-        image = Image.open(img_path).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
+        with open(solved_filename, 'r') as file:
+            solved_text_data = file.read().strip().replace('.', '0').split()
+            solved_text_tensor = torch.tensor([int(num) for num in solved_text_data], dtype=torch.long).view(81)
         
-        with open(text_path, 'r') as file:
-            text_data = file.read().strip().replace('.', '0').split()
-            text_tensor = torch.tensor([int(num) for num in text_data], dtype=torch.long).view(81)  # Flatten the grid
-        
-        return image, text_tensor
+        return unsolved_text_tensor, solved_text_tensor
 
 class Solver(nn.Module):
     def __init__(self):
         super(Solver, self).__init__()
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.relu = nn.ReLU()
-
-        # Dummy input to calculate flat features
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, 3, 500, 500)  # Input image size is 500x500
-            dummy_output = self.features(dummy_input)
-            flat_features = dummy_output.view(-1).shape[0]
-
+        
+        # Embedding layer
+        self.embedding = nn.Embedding(10, 32)  # Assuming 0-9 numbers in Sudoku, embedding size is 32
+        
+        # Transformer encoder layers with batch_first set to True
+        encoder_layer = nn.TransformerEncoderLayer(d_model=32, nhead=8, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
+        
         # Fully connected layers
-        self.fc1 = nn.Linear(flat_features, 800)
-        self.fc2 = nn.Linear(800, 800)
-        self.fc3 = nn.Linear(800, 5000)
-        self.fc4 = nn.Linear(5000, 81*10)
-
-    def features(self, x):
-        x = self.relu(self.conv1(x))
-        x = self.relu(self.conv2(x))
-        x = self.relu(self.conv3(x))
-        x = self.pool(x)
-        return x
+        self.fc1 = nn.Linear(81 * 32, 512)
+        self.fc2 = nn.Linear(512, 81 * 10)  # Output size is 81 * 10 (each cell has 10 possible values: 0-9)
 
     def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.relu(self.fc1(x))
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.fc4(x)
+        x = self.embedding(x)  # [batch_size, 81, 32]
+        x = self.transformer_encoder(x)  # [batch_size, 81, 32]
+        x = x.view(x.size(0), -1)  # [batch_size, 81 * 32]
+        x = torch.relu(self.fc1(x))  # [batch_size, 512]
+        x = self.fc2(x)  # [batch_size, 81 * 10]
+        x = x.view(-1, 81, 10)  # [batch_size, 81, 10]
         return x
 
-
-
 print("Loading dataset...")
-transform = transforms.Compose([
-    transforms.Resize((500, 500)),
-    transforms.ToTensor()
-])
 
 # Load the dataset
-dataset = ImageTextDataset('data/train/imgs/class', 'data/train/text', transform=transform)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+dataset = SudokuDataset('data/train/text/unsolved', 'data/train/text/solved')
+dataloader = DataLoader(dataset, batch_size=2048, shuffle=True)
 print("Dataset loaded")
 
 # Load the validation dataset
-validation_dataset = ImageTextDataset('data/validation/imgs/class', 'data/validation/text', transform)
-validation_loader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
+validation_dataset = SudokuDataset('data/validation/text/unsolved', 'data/validation/text/solved')
+validation_loader = DataLoader(validation_dataset, batch_size=2048, shuffle=False)
 print("Validation dataset loaded")
 
 print("Creating the solver...")

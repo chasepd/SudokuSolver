@@ -126,28 +126,42 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Generate sudoku puzzles')
     parser.add_argument('n', type=int, help='Number of training puzzles to generate')
+    parser.add_argument('--validation', type=int, help='Number of validation puzzles to generate')
+    parser.add_argument('--images', action='store_true', help='Generate images')
     args = parser.parse_args()
 
     train_img_dir = 'data/train/imgs/class'
-    train_text_dir = 'data/train/text'
+    train_unsolved_text_dir = 'data/train/text/unsolved'
+    train_solved_text_dir = 'data/train/text/solved'
 
     validation_img_dir = 'data/validation/imgs/class'
-    validation_text_dir = 'data/validation/text'
+    validation_unsolved_text_dir = 'data/validation/text/unsolved'
+    validation_solved_text_dir = 'data/validation/text/solved'
 
-    available_fonts = list_fonts()    
+    generate_images = args.images
+
+    if generate_images:
+        available_fonts = list_fonts()    
 
     # Verify directories exist
-    if not os.path.exists(train_img_dir):
+    if not os.path.exists(train_img_dir) and generate_images:
         os.makedirs(train_img_dir)
 
-    if not os.path.exists(train_text_dir):
-        os.makedirs(train_text_dir)
-
-    if not os.path.exists(validation_img_dir):
+    if not os.path.exists(train_unsolved_text_dir):
+        os.makedirs(train_unsolved_text_dir)
+    
+    if not os.path.exists(train_solved_text_dir):
+        os.makedirs(train_solved_text_dir)
+    
+    if not os.path.exists(validation_img_dir) and generate_images:
         os.makedirs(validation_img_dir)
+    
+    if not os.path.exists(validation_unsolved_text_dir):
+        os.makedirs(validation_unsolved_text_dir)
+    
+    if not os.path.exists(validation_solved_text_dir):
+        os.makedirs(validation_solved_text_dir)
 
-    if not os.path.exists(validation_text_dir):
-        os.makedirs(validation_text_dir)
 
     puzzle_count = args.n
 
@@ -155,27 +169,45 @@ def main():
         print(f'\rGenerating puzzles... {(i + 1) / args.n * 100:.4f}% complete', end='')
         puzzle, solved_puzzle = generate_puzzle()
         filename = f"puzzle_{i}.txt"
-        with open(f'{train_text_dir}/{filename}', 'w') as f:
+
+        with open(f'{train_unsolved_text_dir}/{filename}', 'w') as f:
+            for row in puzzle:
+                f.write(' '.join(row) + '\n')
+
+        with open(f'{train_solved_text_dir}/{filename}', 'w') as f:
             for row in solved_puzzle:
                 f.write(' '.join(row) + '\n')
         
-        filename = f"puzzle_{i}.png"
-        generate_image(puzzle, f'{train_img_dir}/{filename}', available_fonts)
+        if generate_images:
+            filename = f"puzzle_{i}.png"
+            generate_image(puzzle, f'{train_img_dir}/{filename}', available_fonts)
 
     print()
 
-    validation_puzzle_count = args.n // 10
+    if args.validation is None:
+        validation_puzzle_count = args.n // 10
+
+        if validation_puzzle_count > 2500:
+            validation_puzzle_count = 2500
+    else:
+        validation_puzzle_count = args.validation
 
     for i in range(validation_puzzle_count):
         print(f'\rGenerating validation puzzles... {(i + 1) / validation_puzzle_count * 100:.4f}% complete', end='')
         puzzle, solved_puzzle = generate_puzzle()
         filename = f"puzzle_{i}.txt"
-        with open(f'{validation_text_dir}/{filename}', 'w') as f:
+
+        with open(f'{validation_unsolved_text_dir}/{filename}', 'w') as f:
+            for row in puzzle:
+                f.write(' '.join(row) + '\n')
+
+        with open(f'{validation_solved_text_dir}/{filename}', 'w') as f:
             for row in solved_puzzle:
                 f.write(' '.join(row) + '\n')
         
-        filename = f"puzzle_{i}.png"
-        generate_image(puzzle, f'{validation_img_dir}/{filename}', available_fonts)
+        if generate_images:
+            filename = f"puzzle_{i}.png"
+            generate_image(puzzle, f'{validation_img_dir}/{filename}', available_fonts)
     
     print()
 
